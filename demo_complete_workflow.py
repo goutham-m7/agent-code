@@ -62,104 +62,151 @@ def create_medicaid_ura_problem_statement() -> str:
     """
 
 def create_medicaid_schema() -> Dict[str, Any]:
-    """Create a mock Medicaid database schema for demonstration"""
+    """Create the actual Medicaid database schema as provided by the user"""
     return {
-        "DRUGS": {
-            "table_name": "DRUGS",
-            "description": "Comprehensive drug information table containing National Drug Code (NDC) data, drug names, formulations, strengths, and manufacturer details for Medicaid Drug Rebate Program calculations and URA analysis.",
+        "MN_MCD_CLAIM": {
+            "table_name": "MN_MCD_CLAIM",
+            "description": "Main claims table for all Medicaid drug rebate claims. Contains claim-level information including status, program, state, labeler, and rebate amounts.",
             "columns": [
-                {"name": "NDC_CODE", "data_type": "VARCHAR2(20)", "nullable": "N", "description": "National Drug Code identifier"},
-                {"name": "DRUG_NAME", "data_type": "VARCHAR2(500)", "nullable": "N", "description": "Official drug name"},
-                {"name": "GENERIC_NAME", "data_type": "VARCHAR2(500)", "nullable": "Y", "description": "Generic drug name if applicable"},
-                {"name": "STRENGTH", "data_type": "VARCHAR2(100)", "nullable": "Y", "description": "Drug strength and unit"},
-                {"name": "DOSAGE_FORM", "data_type": "VARCHAR2(100)", "nullable": "Y", "description": "Dosage form (tablet, capsule, etc.)"},
-                {"name": "MANUFACTURER_ID", "data_type": "NUMBER(10)", "nullable": "N", "description": "Reference to manufacturer table"},
-                {"name": "BRAND_OR_GENERIC", "data_type": "VARCHAR2(20)", "nullable": "N", "description": "B for Brand, G for Generic"},
-                {"name": "LAUNCH_DATE", "data_type": "DATE", "nullable": "Y", "description": "Date drug was first launched"},
-                {"name": "TERMINATION_DATE", "data_type": "DATE", "nullable": "Y", "description": "Date drug was terminated if applicable"},
-                {"name": "REBATE_ELIGIBLE", "data_type": "VARCHAR2(1)", "nullable": "N", "description": "Y if eligible for rebates, N if not"}
+                {"name": "MCD_CLAIM_ID", "data_type": "NUMBER", "nullable": "N", "description": "Primary key for claim identification"},
+                {"name": "BUS_ELEM_ID", "data_type": "NUMBER", "nullable": "Y", "description": "Business element identifier"},
+                {"name": "ORIGINAL_CLAIM_ID", "data_type": "NUMBER", "nullable": "Y", "description": "Original claim ID for adjustments"},
+                {"name": "PROGRAM_ID", "data_type": "NUMBER", "nullable": "Y", "description": "Associated Medicaid program"},
+                {"name": "URA_PRICELIST_ID", "data_type": "NUMBER", "nullable": "Y", "description": "URA pricing list reference"},
+                {"name": "CLAIM_NUM", "data_type": "VARCHAR2", "nullable": "Y", "description": "Human-readable claim number"},
+                {"name": "REV_NUM", "data_type": "NUMBER", "nullable": "Y", "description": "Revision number for claim updates"},
+                {"name": "CLAIM_STATUS", "data_type": "VARCHAR2", "nullable": "Y", "description": "Current status (Pending, Approved, Rejected, etc.)"},
+                {"name": "CLAIM_TYPE", "data_type": "VARCHAR2", "nullable": "Y", "description": "Type of claim (Original, Adjustment, Conversion)"},
+                {"name": "ORIG_QTR", "data_type": "VARCHAR2", "nullable": "Y", "description": "Original quarter for the claim"},
+                {"name": "STATE", "data_type": "VARCHAR2", "nullable": "Y", "description": "State where claim is filed"},
+                {"name": "LABELER", "data_type": "VARCHAR2", "nullable": "Y", "description": "Drug manufacturer/labeler"},
+                {"name": "REBATE_DUE", "data_type": "NUMBER", "nullable": "Y", "description": "Calculated rebate amount due"},
+                {"name": "DUE_DATE", "data_type": "DATE", "nullable": "Y", "description": "When rebate payment is due"}
             ],
-            "primary_keys": ["NDC_CODE"],
+            "primary_keys": ["MCD_CLAIM_ID"],
             "foreign_keys": [
-                {"columns": ["MANUFACTURER_ID"], "referenced_table": "MANUFACTURERS", "referenced_columns": ["MANUFACTURER_ID"]}
+                {"columns": ["PROGRAM_ID"], "referenced_table": "MN_MCD_PROGRAM", "referenced_columns": ["MCD_PROGRAM_ID"]},
+                {"columns": ["URA_PRICELIST_ID"], "referenced_table": "MN_MCD_PRICELIST_PUBLISHED", "referenced_columns": ["URA_PRICELIST_ID"]}
             ],
+            "estimated_rows": 100000,
+            "table_size": "50MB"
+        },
+        
+        "MN_MCD_CLAIM_LINE": {
+            "table_name": "MN_MCD_CLAIM_LINE",
+            "description": "Detailed line items for each claim containing drug-specific information, URA amounts, units, and rebate calculations.",
+            "columns": [
+                {"name": "MCD_CLAIM_LINE_ID", "data_type": "NUMBER", "nullable": "N", "description": "Primary key for claim line"},
+                {"name": "CLAIM_ID", "data_type": "NUMBER", "nullable": "N", "description": "Reference to parent claim"},
+                {"name": "PRODUCT_ID", "data_type": "NUMBER", "nullable": "Y", "description": "Drug product identifier"},
+                {"name": "URA_PRICELIST_ID", "data_type": "NUMBER", "nullable": "Y", "description": "URA pricing list for this line"},
+                {"name": "SYS_CALC_URA", "data_type": "NUMBER", "nullable": "Y", "description": "System-calculated URA amount"},
+                {"name": "OVERRIDE_URA", "data_type": "NUMBER", "nullable": "Y", "description": "Manually overridden URA amount"},
+                {"name": "INV_URA", "data_type": "NUMBER", "nullable": "Y", "description": "Invoice URA amount"},
+                {"name": "INV_UNITS", "data_type": "NUMBER", "nullable": "Y", "description": "Invoice units (quantity)"},
+                {"name": "INV_REQ_REBATE", "data_type": "NUMBER", "nullable": "Y", "description": "Invoice required rebate amount"},
+                {"name": "REBATE_DUE", "data_type": "NUMBER", "nullable": "Y", "description": "Final rebate amount due for this line"},
+                {"name": "URA_CALC_QTR", "data_type": "VARCHAR2", "nullable": "Y", "description": "Quarter used for URA calculation"},
+                {"name": "VALIDATION_STATUS", "data_type": "VARCHAR2", "nullable": "Y", "description": "Data validation status"},
+                {"name": "REPORTED_STATUS", "data_type": "VARCHAR2", "nullable": "Y", "description": "Reporting status to CMS"}
+            ],
+            "primary_keys": ["MCD_CLAIM_LINE_ID"],
+            "foreign_keys": [
+                {"columns": ["CLAIM_ID"], "referenced_table": "MN_MCD_CLAIM", "referenced_columns": ["MCD_CLAIM_ID"]},
+                {"columns": ["URA_PRICELIST_ID"], "referenced_table": "MN_MCD_PRICELIST_PUBLISHED", "referenced_columns": ["URA_PRICELIST_ID"]}
+            ],
+            "estimated_rows": 500000,
+            "table_size": "100MB"
+        },
+        
+        "MN_MCD_PROGRAM": {
+            "table_name": "MN_MCD_PROGRAM",
+            "description": "Defines Medicaid drug rebate programs and their rules, formulas, and configuration.",
+            "columns": [
+                {"name": "MCD_PROGRAM_ID", "data_type": "NUMBER", "nullable": "N", "description": "Primary key for program"},
+                {"name": "PROGRAM_SHORT_NAME", "data_type": "VARCHAR2", "nullable": "Y", "description": "Short name for program identification"},
+                {"name": "EXTERNAL_PROGRAM_NAME", "data_type": "VARCHAR2", "nullable": "Y", "description": "External program name"},
+                {"name": "START_CAL_QTR", "data_type": "VARCHAR2", "nullable": "Y", "description": "Program start quarter"},
+                {"name": "END_CAL_QTR", "data_type": "VARCHAR2", "nullable": "Y", "description": "Program end quarter"},
+                {"name": "PROGRAM_TYPE", "data_type": "VARCHAR2", "nullable": "Y", "description": "Type of program"},
+                {"name": "PROGRAM_STATUS", "data_type": "VARCHAR2", "nullable": "Y", "description": "Current program status"},
+                {"name": "DEFAULT_FORMULA_ID", "data_type": "NUMBER", "nullable": "Y", "description": "Default URA calculation formula"}
+            ],
+            "primary_keys": ["MCD_PROGRAM_ID"],
+            "foreign_keys": [],
+            "estimated_rows": 1000,
+            "table_size": "5MB"
+        },
+        
+        "MN_MCD_PAYMENT": {
+            "table_name": "MN_MCD_PAYMENT",
+            "description": "Tracks rebate payments and disbursements, including amounts, status, and payment details.",
+            "columns": [
+                {"name": "MCD_PAYMENT_ID", "data_type": "NUMBER", "nullable": "N", "description": "Primary key for payment"},
+                {"name": "PAY_NUM", "data_type": "VARCHAR2", "nullable": "Y", "description": "Payment number"},
+                {"name": "STATUS", "data_type": "VARCHAR2", "nullable": "Y", "description": "Payment status (Pending, Processed, Mailed, etc.)"},
+                {"name": "CACHED_REBATE_AMOUNT", "data_type": "NUMBER", "nullable": "Y", "description": "Cached rebate amount"},
+                {"name": "CACHED_INTEREST", "data_type": "NUMBER", "nullable": "Y", "description": "Cached interest amount"},
+                {"name": "CACHED_TOTAL_AMOUNT", "data_type": "NUMBER", "nullable": "Y", "description": "Total amount including rebate and interest"},
+                {"name": "CHECK_NUM", "data_type": "VARCHAR2", "nullable": "Y", "description": "Check number for payment"},
+                {"name": "CHECK_DATE", "data_type": "DATE", "nullable": "Y", "description": "Date check was issued"},
+                {"name": "PAID_DATE", "data_type": "DATE", "nullable": "Y", "description": "Date payment was processed"},
+                {"name": "STATE", "data_type": "VARCHAR2", "nullable": "Y", "description": "State for the payment"}
+            ],
+            "primary_keys": ["MCD_PAYMENT_ID"],
+            "foreign_keys": [],
             "estimated_rows": 50000,
             "table_size": "25MB"
         },
         
-        "PRICING": {
-            "table_name": "PRICING",
-            "description": "Drug pricing information including Average Manufacturer Price (AMP), Best Price (BP), and other pricing data required for URA calculations in the Medicaid Drug Rebate Program.",
+        "MN_MCD_VALIDATION_MSG": {
+            "table_name": "MN_MCD_VALIDATION_MSG",
+            "description": "Tracks validation results and business rule compliance for claims and claim lines.",
             "columns": [
-                {"name": "PRICING_ID", "data_type": "NUMBER(15)", "nullable": "N", "description": "Primary key for pricing records"},
-                {"name": "NDC_CODE", "data_type": "VARCHAR2(20)", "nullable": "N", "description": "Reference to drugs table"},
-                {"name": "QUARTER", "data_type": "VARCHAR2(6)", "nullable": "N", "description": "Quarter in YYYYQ format"},
-                {"name": "AMP", "data_type": "NUMBER(10,2)", "nullable": "Y", "description": "Average Manufacturer Price"},
-                {"name": "BP", "data_type": "NUMBER(10,2)", "nullable": "Y", "description": "Best Price"},
-                {"name": "WAC", "data_type": "NUMBER(10,2)", "nullable": "Y", "description": "Wholesale Acquisition Cost"},
-                {"name": "ASP", "data_type": "NUMBER(10,2)", "nullable": "Y", "description": "Average Sales Price"},
-                {"name": "REPORTING_DATE", "data_type": "DATE", "nullable": "N", "description": "Date pricing was reported"},
-                {"name": "FINAL_FLAG", "data_type": "VARCHAR2(1)", "nullable": "N", "description": "F for Final, P for Preliminary"},
-                {"name": "RESTATED_FLAG", "data_type": "VARCHAR2(1)", "nullable": "N", "description": "Y if restated, N if original"}
+                {"name": "MCD_MSG_ID", "data_type": "NUMBER", "nullable": "N", "description": "Primary key"},
+                {"name": "CLAIM_LINE_ID", "data_type": "NUMBER", "nullable": "Y", "description": "Reference to claim line"},
+                {"name": "VALIDATION_CLASS_NAME", "data_type": "VARCHAR2", "nullable": "Y", "description": "Type of validation"},
+                {"name": "SEVERITY", "data_type": "VARCHAR2", "nullable": "Y", "description": "Severity level (Error, Warning, Info)"},
+                {"name": "DISPLAY_ORDER", "data_type": "NUMBER", "nullable": "Y", "description": "Order for display"},
+                {"name": "RECOM_DISP_UNITS", "data_type": "NUMBER", "nullable": "Y", "description": "Recommended dispute units"},
+                {"name": "RECOM_DISPUTE_CODES", "data_type": "VARCHAR2", "nullable": "Y", "description": "Recommended dispute codes"},
+                {"name": "FORMULA_DEF", "data_type": "VARCHAR2", "nullable": "Y", "description": "Formula definition"},
+                {"name": "FORMULA_EXP", "data_type": "VARCHAR2", "nullable": "Y", "description": "Formula expression"}
             ],
-            "primary_keys": ["PRICING_ID"],
+            "primary_keys": ["MCD_MSG_ID"],
             "foreign_keys": [
-                {"columns": ["NDC_CODE"], "referenced_table": "DRUGS", "referenced_columns": ["NDC_CODE"]}
+                {"columns": ["CLAIM_LINE_ID"], "referenced_table": "MN_MCD_CLAIM_LINE", "referenced_columns": ["MCD_CLAIM_LINE_ID"]}
             ],
             "estimated_rows": 200000,
-            "table_size": "50MB"
+            "table_size": "40MB"
         },
         
-        "REBATES": {
-            "table_name": "REBATES",
-            "description": "Medicaid drug rebate calculations and URA values including calculated and CMS-provided amounts.",
+        "MN_MCD_PRICELIST_PUBLISHED": {
+            "table_name": "MN_MCD_PRICELIST_PUBLISHED",
+            "description": "Published URA pricing lists for different quarters and programs.",
             "columns": [
-                {"name": "REBATE_ID", "data_type": "NUMBER(15)", "nullable": "N", "description": "Primary key for rebate records"},
-                {"name": "NDC_CODE", "data_type": "VARCHAR2(20)", "nullable": "N", "description": "Reference to drugs table"},
-                {"name": "QUARTER", "data_type": "VARCHAR2(6)", "nullable": "N", "description": "Quarter in YYYYQ format"},
-                {"name": "CALCULATED_URA", "data_type": "NUMBER(10,2)", "nullable": "Y", "description": "URA calculated using our formulas"},
-                {"name": "CMS_URA", "data_type": "NUMBER(10,2)", "nullable": "Y", "description": "URA provided by CMS/MDP"},
-                {"name": "URA_DIFFERENCE", "data_type": "NUMBER(10,2)", "nullable": "Y", "description": "Difference between calculated and CMS URA"},
-                {"name": "DIFFERENCE_PERCENTAGE", "data_type": "NUMBER(5,2)", "nullable": "Y", "description": "Percentage difference"},
-                {"name": "DISCREPANCY_FLAG", "data_type": "VARCHAR2(1)", "nullable": "N", "description": "Y if discrepancy > threshold, N if not"},
-                {"name": "CALCULATION_DATE", "data_type": "DATE", "nullable": "N", "description": "Date URA was calculated"},
-                {"name": "NOTES", "data_type": "VARCHAR2(1000)", "nullable": "Y", "description": "Additional notes about the calculation"}
+                {"name": "URA_PRICELIST_ID", "data_type": "NUMBER", "nullable": "N", "description": "Primary key for pricing list"},
+                {"name": "URA_PRICELIST_NAME", "data_type": "VARCHAR2", "nullable": "Y", "description": "Name of the pricing list"},
+                {"name": "QUARTER", "data_type": "VARCHAR2", "nullable": "Y", "description": "Quarter for the pricing list"},
+                {"name": "PROGRAM_SHORT_NAME", "data_type": "VARCHAR2", "nullable": "Y", "description": "Associated program"}
             ],
-            "primary_keys": ["REBATE_ID"],
-            "foreign_keys": [
-                {"columns": ["NDC_CODE"], "referenced_table": "DRUGS", "referenced_columns": ["NDC_CODE"]}
-            ],
-            "estimated_rows": 150000,
-            "table_size": "35MB"
-        },
-        
-        "MANUFACTURERS": {
-            "table_name": "MANUFACTURERS",
-            "description": "Drug manufacturer information including company details and Medicaid rebate agreements.",
-            "columns": [
-                {"name": "MANUFACTURER_ID", "data_type": "NUMBER(10)", "nullable": "N", "description": "Primary key for manufacturer"},
-                {"name": "MANUFACTURER_NAME", "data_type": "VARCHAR2(200)", "nullable": "N", "description": "Company name"},
-                {"name": "FEIN", "data_type": "VARCHAR2(20)", "nullable": "Y", "description": "Federal Employer Identification Number"},
-                {"name": "REBATE_AGREEMENT_DATE", "data_type": "DATE", "nullable": "Y", "description": "Date of Medicaid rebate agreement"},
-                {"name": "AGREEMENT_STATUS", "data_type": "VARCHAR2(20)", "nullable": "N", "description": "Active, Terminated, Pending"},
-                {"name": "CONTACT_EMAIL", "data_type": "VARCHAR2(100)", "nullable": "Y", "description": "Primary contact email"},
-                {"name": "CONTACT_PHONE", "data_type": "VARCHAR2(20)", "nullable": "Y", "description": "Primary contact phone"}
-            ],
-            "primary_keys": ["MANUFACTURER_ID"],
+            "primary_keys": ["URA_PRICELIST_ID"],
             "foreign_keys": [],
             "estimated_rows": 5000,
-            "table_size": "5MB"
+            "table_size": "2MB"
         }
     }
 
 def create_sample_queries() -> List[str]:
-    """Create sample queries for demonstration"""
+    """Create sample queries for demonstration using actual Medicaid schema"""
     return [
-        "Find URA discrepancies greater than 10% for Q1 2024",
-        "Compare AMP vs BP pricing data across different manufacturers",
-        "Analyze CPI penalty adjustments for brand drugs",
-        "Identify drugs with missing or incorrect baseline pricing data",
-        "Find quarterly URA variations that exceed normal thresholds"
+        "Find URA discrepancies between SYS_CALC_URA and INV_URA greater than 10% for Q1 2024",
+        "Compare rebate amounts across different states and programs",
+        "Analyze validation issues by severity and claim status",
+        "Identify claims with missing or incorrect URA pricing list references",
+        "Find quarterly rebate variations that exceed tolerance thresholds",
+        "Analyze payment patterns by state and claim type",
+        "Find claims with validation errors that need immediate attention"
     ]
 
 def demo_individual_components():
@@ -189,7 +236,7 @@ def demo_individual_components():
         use_case_context = analyzer.get_analysis_for_llm_context(analysis)
         
         sql_query = sql_gen.generate_sql(
-            "Find URA discrepancies for Q1 2024",
+            "Find URA discrepancies between SYS_CALC_URA and INV_URA for Q1 2024",
             database_schema,
             use_case_context
         )
@@ -202,12 +249,14 @@ def demo_individual_components():
         from workflow_agents import HybridComparisonEngine
         import pandas as pd
         
-        # Create sample data
+        # Create sample data using actual Medicaid schema fields
         sample_data = pd.DataFrame({
-            'NDC_CODE': ['12345-6789-01', '12345-6789-02', '12345-6789-03'],
-            'CALCULATED_URA': [100.00, 150.00, 200.00],
-            'CMS_URA': [95.00, 160.00, 190.00],
-            'QUARTER': ['2024Q1', '2024Q1', '2024Q1']
+            'MCD_CLAIM_LINE_ID': [1001, 1002, 1003],
+            'SYS_CALC_URA': [100.00, 150.00, 200.00],
+            'INV_URA': [95.00, 160.00, 190.00],
+            'INV_UNITS': [100, 150, 200],
+            'REBATE_DUE': [5.00, -10.00, 10.00],
+            'ORIG_QTR': ['2024Q1', '2024Q1', '2024Q1']
         })
         
         comparison_engine = HybridComparisonEngine()
@@ -238,7 +287,7 @@ def demo_complete_workflow():
         # Prepare inputs
         problem_statement = create_medicaid_ura_problem_statement()
         database_schema = create_medicaid_schema()
-        user_query = "Find URA discrepancies greater than 10% for Q1 2024"
+        user_query = "Find URA discrepancies between SYS_CALC_URA and INV_URA greater than 10% for Q1 2024"
         
         print(f"📋 Problem Statement: {len(problem_statement)} characters")
         print(f"🗄️  Database Schema: {len(database_schema)} tables")
